@@ -75,7 +75,7 @@ To be able to just start m2ee-tools using a simple `m2ee` alias, we can set the 
     # put something like this in your ~/.bashrc
     export PYTHONPATH="/home/example/mendix/m2ee-tools/thirdparty/httplib2-0.10.3/python2/:\
     /home/example/mendix/m2ee-tools/thirdparty/PyYAML-3.12/lib/:\
-    "/home/example/mendix/m2ee-tools/thirdparty/psycopg2-2.9.1/lib/"
+    /home/example/mendix/m2ee-tools/thirdparty/psycopg2-2.9.1/lib/"
     alias m2ee="/home/example/mendix/m2ee-tools/7.2/src/m2ee.py \
     -c /home/example/mendix/application/data/config/m2ee.yaml"
 
