@@ -634,6 +634,25 @@ class M2EEConfig:
     def get_max_active_db_connections(self):
         return self._conf['mxruntime'].get('ConnectionPoolingMaxActive', 50)
 
+    def get_usage_metrics_page_size(self):
+            return self._conf['metering'].get('usage_metrics_page_size', 0)
+
+    def get_usage_metrics_output_file_name(self):
+        return self._conf['metering'].get('usage_metrics_output_file_name', 'mendix_usage_metrics')
+
+    def get_usage_metrics_email_fields(self):
+        return self._conf['metering'].get('usage_metrics_email_fields', '')
+
+    def get_usage_metrics_subscription_service_uri(self):
+        return self._conf['metering'].get('usage_metrics_subscription_service_uri', '')
+
+    def get_usage_metrics_subscription_service_timeout(self):
+        return self._conf['metering'].get('usage_metrics_subscription_service_timeout', 30)
+
+    def get_project_id(self):
+        project_id_from_mda = self._model_metadata['ProjectID']
+        return project_id_from_mda if project_id_from_mda else ''
+
 
 def find_yaml_files():
     yaml_files = []

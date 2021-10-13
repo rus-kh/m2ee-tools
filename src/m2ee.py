@@ -4,9 +4,11 @@
 #
 
 from __future__ import print_function
+
 import argparse
 import atexit
 import cmd
+
 import datetime
 import getpass
 import logging
@@ -18,9 +20,10 @@ import signal
 import string
 import subprocess
 import sys
+
 import yaml
 
-from m2ee import pgutil, M2EE, client_errno
+from m2ee import pgutil, M2EE, client_errno, metering
 import m2ee
 
 logger = logging
@@ -28,6 +31,7 @@ logger = logging
 if not sys.stdout.isatty():
     import codecs
     import locale
+
     sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout)
 
 try:
@@ -313,7 +317,7 @@ class CLI(cmd.Cmd, object):
             errorline.insert(
                 0,
                 datetime.datetime.fromtimestamp(error['timestamp'] / 1000)
-                .strftime("%Y-%m-%d %H:%M:%S")
+                    .strftime("%Y-%m-%d %H:%M:%S")
             )
             print(' '.join(errorline))
 
@@ -370,7 +374,7 @@ class CLI(cmd.Cmd, object):
         feedback = self.m2ee.client.get_license_information()
         if 'license' in feedback:
             logger.debug(yaml.safe_dump(feedback['license'],
-                         allow_unicode=True))
+                                allow_unicode=True))
             import copy
             licensecopy = copy.deepcopy(feedback['license'])
             self._print_license(licensecopy)
@@ -790,7 +794,7 @@ class CLI(cmd.Cmd, object):
         self.m2ee.cleanup_runtimes_except(args.split())
 
     def complete_cleanup_runtimes_except(self, text, line, begidx, endidx):
-        words = line[:len(line)-len(text)].split()
+        words = line[:len(line) - len(text)].split()
         found_versions = self.m2ee.list_installed_runtimes()
         return ["%s " % version for version in found_versions
                 if version.startswith(text)
@@ -869,6 +873,18 @@ class CLI(cmd.Cmd, object):
             suggestions[0] = "%s " % suggestions[0]
         return suggestions
 
+    def do_export_usage_metrics(self, args):
+        # available only till Mendix v9.6, from v9.6 replaced by runtime micrometer:
+        # https://docs.mendix.com/releasenotes/studio-pro/9.6#custom-metrics
+        if self.m2ee.config.get_runtime_version() < 9.6:
+            metering.metering_export_usage_metrics(self.m2ee)
+        else:
+            print("""
+                export_usage_metrics supported only for Mendix versions below 9.6.
+                From version 9.6 and above use Micrometer instead:
+                https://docs.mendix.com/releasenotes/studio-pro/9.6#custom-metrics
+            """)
+
     def do_help(self, args):
         print("""Welcome to m2ee, the Mendix Runtime helper tools.
 
@@ -887,6 +903,7 @@ Available commands:
  about - show Mendix Runtime version information
  check_constants - check for missing or unneeded constant definitions
  enable_debugger - enable remote debugger API
+ export_usage_metrics - export usage metrics
  disable_debugger - disable remote debugger API
  show_debugger_status - show whether debugger is enabled or not
  show_current_runtime_requests - show action stack of current running requests

@@ -39,6 +39,10 @@ There is no need to compile C extensions that are available for PyYAML. The pure
 
 At [https://github.com/httplib2/httplib2/releases](https://github.com/httplib2/httplib2/releases), get the tar.gz, and extract it in the m2ee-tools/thirdparty directory.
 
+## psycopg2
+
+At [https://pypi.org/project/psycopg2/#files](https://pypi.org/project/psycopg2/#files), get the tar.gz, and extract it in the m2ee-tools/thirdparty directory. Also you can find an installation manual here [https://www.psycopg.org/docs/install.html](https://www.psycopg.org/docs/install.html)
+
 ## Finishing up...
 
 After gathering all software together, and creating the application folder hierarchy, your mendix directory might look like this example:
