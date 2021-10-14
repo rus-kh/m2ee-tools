@@ -709,18 +709,20 @@ mxruntime:
  PersistentSessions: True
 
 metering:
- #
  # usage_metrics_page_size specifies how many usage records should be processed
  # in a page during the export_usage_metrics command. If not set then no pagination
  # would be done during export_usage_metrics which would increase the memory consumption.
  # Also if a very small page size is set it would increase the time taken to complete
  # export_usage_metrics
  usage_metrics_page_size: 50000
-
  # usage metrics will be exported to this file appended with the time as milliseconds since epoch
  usage_metrics_output_file_name: "mendix_usage_metrics"
- 
- # If your app uses specializations of the 'System.User' entity to store users, use this variable 
+ # usage metrics will be exported to the Subscription Service via this endpoint in case of 
+ # your app is connected to the Internet
+ usage_metrics_subscription_service_uri: https://subscription-api-dev-nonprod-4-eu-central-1.dev.mendix.com/v3/activate
+ # timeout for Subscription Service in seconds (default is 30 sec)
+ usage_metrics_subscription_service_timeout: 30
+ # [optional] If your app uses specializations of the 'System.User' entity to store users, use this variable 
  # to point to the them. This enables us to identify internal and external users of your app and 
  # add them to the usage report during the export_usage_metrics command execution. 
  # The value of this variable is in the format 'Module.Entity.Attribute', where 'Module' is the 
@@ -729,7 +731,7 @@ metering:
  # specializations of 'System.User', you can specify the values in comma-separated format. 
  # That is 'Module1.Entity1.Attribute1,Module2.Entity2.Attribute2,…,ModuleN.EntityN.AttributeN'. 
  # In the following example there are two specializations identified: 
- # 'Administration.Account.Email,MendixSSO.MendixSSOUser.EmailAddress'
+ # "Administration.Account.Email,MendixSSO.MendixSSOUser.EmailAddress"
  # Define your own specializations of the 'System.User' entity to store users if needed, uncomment 
  # next line and set this variable to specializations that you defined to use this functionality:
  #usage_metrics_email_fields: Module1.Entity1.Attribute1, Module2.Entity2.Attribute2

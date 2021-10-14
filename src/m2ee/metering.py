@@ -82,7 +82,7 @@ def open_db_connection(config):
             password = db_password
         )
 
-        cur = conn.cursor(cursor_factory=NamedTupleCursor)
+        cur = conn.cursor(cursor_factory = NamedTupleCursor)
 
         logger.debug("Usage metering: connected to database")
 
@@ -316,7 +316,7 @@ def metering_convert_data_for_export(usage_metric, server_id, to_file = False):
     # isAnonymous needs to be kept null if null, so possible values here are: true|false|null
     converted_data["isAnonymous"] = usage_metric.is_anonymous
     # lastlogin needs to be kept null if null, so possible values here are: <epoch_time>|null
-    converted_data["lastlogin"] = convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
+    converted_data["lastlogin"] = metering_convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
     converted_data["name"] = metering_encrypt(usage_metric.name)
     converted_data["webserviceuser"] = usage_metric.webserviceuser
 
@@ -337,7 +337,7 @@ def metering_get_hashed_email_domain(name, email):
     return hashed_email_domain
 
 
-def convert_datetime_to_epoch(lastlogin):
+def metering_convert_datetime_to_epoch(lastlogin):
     # Convert datetime in epoch format
     lastlogin_string = str(lastlogin)
     parsed_datetime = datetime.strptime(lastlogin_string, "%Y-%m-%d %H:%M:%S.%f")
