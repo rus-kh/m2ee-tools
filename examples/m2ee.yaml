@@ -38,7 +38,7 @@ metering:
  usage_metrics_output_file_name: "mendix_usage_metrics"
  # usage metrics will be exported to the Subscription Service via this endpoint in case of 
  # your app is connected to the Internet
- usage_metrics_subscription_service_uri: https://subscription-api-dev-nonprod-4-eu-central-1.dev.mendix.com/v3/activate
+ usage_metrics_subscription_service_uri: https://subscription-api.dev.mendix.com/v3/activate #FIXME: replace with correct url when we have one
  # timeout for Subscription Service in seconds (default is 30 sec)
  usage_metrics_subscription_service_timeout: 30
  # [optional] If your app uses specializations of the 'System.User' entity to store users, use this variable 
