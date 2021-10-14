@@ -730,7 +730,9 @@ metering:
  # That is 'Module1.Entity1.Attribute1,Module2.Entity2.Attribute2,…,ModuleN.EntityN.AttributeN'. 
  # In the following example there are two specializations identified: 
  # 'Administration.Account.Email,MendixSSO.MendixSSOUser.EmailAddress'
- usage_metrics_email_fields: Module1.Entity1.Attribute1, Module2.Entity2.Attribute2
+ # Define your own specializations of the 'System.User' entity to store users if needed, uncomment 
+ # next line and set this variable to specializations that you defined to use this functionality:
+ #usage_metrics_email_fields: Module1.Entity1.Attribute1, Module2.Entity2.Attribute2
 
 # By specifying file names in the include section, additional configuration
 # will be read from those files, and will be deep-merged into the already read
