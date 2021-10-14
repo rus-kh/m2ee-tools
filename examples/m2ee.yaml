@@ -39,7 +39,7 @@ metering:
  # usage metrics will be exported to this file appended with the time as milliseconds since epoch
  usage_metrics_output_file_name: "mendix_usage_metrics"
 
- # If your app uses specializations of the 'System.User' entity to store users, use this variable 
+ # [optional] If your app uses specializations of the 'System.User' entity to store users, use this variable 
  # to point to the them. This enables us to identify internal and external users of your app and 
  # add them to the usage report during the export_usage_metrics command execution. 
  # The value of this variable is in the format 'Module.Entity.Attribute', where 'Module' is the 
@@ -49,7 +49,9 @@ metering:
  # That is 'Module1.Entity1.Attribute1,Module2.Entity2.Attribute2,…,ModuleN.EntityN.AttributeN'. 
  # In the following example there are two specializations identified: 
  # "Administration.Account.Email,MendixSSO.MendixSSOUser.EmailAddress"
- usage_metrics_email_fields: Module1.Entity1.Attribute1, Module2.Entity2.Attribute2
+ # Define your own specializations of the 'System.User' entity to store users if needed, uncomment 
+ # next line and set this variable to specializations that you defined to use this functionality:
+ #usage_metrics_email_fields: Module1.Entity1.Attribute1, Module2.Entity2.Attribute2
 
 logging:
  - # example of file logging by the platform itself
