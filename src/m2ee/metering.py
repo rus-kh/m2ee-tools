@@ -11,6 +11,7 @@ import re
 import psycopg2
 import socket
 
+from os import path
 from m2ee.client import M2EEAdminNotAvailable
 from psycopg2 import sql
 from psycopg2.extras import NamedTupleCursor
@@ -273,9 +274,12 @@ def send_to_subscription_service(config, server_id, usage_metrics):
 def metering_export_to_file(config, user_count, db_cursor, page_size, server_id):
     try:
         # create export file
-        output_file_name = config.get_usage_metrics_output_file_name() + "_" + str(int(time())) + ".json"
+        output_file = path.join(
+                config.get_usage_metrics_output_file_path(),
+                config.get_usage_metrics_output_file_name() + "_" + str(int(time())) + ".json"
+            )
 
-        out_file = open(output_file_name, "w")
+        out_file = open(output_file, "w")
 
         # dump usage metering data to file
         out_file.write("[\n")
@@ -284,7 +288,7 @@ def metering_export_to_file(config, user_count, db_cursor, page_size, server_id)
             metering_convert_and_export_to_file(usage_metering_result, server_id, out_file)
         out_file.write("\n]")
 
-        logger.info("Usage metrics exported %s to %s", datetime.now(), output_file_name)
+        logger.info("Usage metrics exported %s to %s", datetime.now(), output_file)
     except Exception as e:
         logger.error(e)
     finally:
