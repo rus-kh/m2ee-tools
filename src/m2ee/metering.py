@@ -42,32 +42,25 @@ def metering_export_usage_metrics(m2ee):
 
         config = m2ee.config
 
-        db_cursor, db_conn = open_db_connection(config)
-        
-        # get the number of users
-        user_count = get_users_count(db_cursor)
-
-        # get page size from config
-        page_size = config.get_usage_metrics_page_size()
-        if page_size == 0:
-            # user does not want pagination
-            page_size = user_count
+        db_conn = open_db_connection(config)
+        db_cursor = metering_prepare_db_cursor_for_usage_query(config, db_conn)
 
         # starting export
         is_subscription_service_available = metering_check_subscription_service_availability(config)
         if is_subscription_service_available:
             # export to Subscription Service directly if it is available (for connected environments)
             logger.info("Exporting to the Subscription Service")
-            metering_export_to_subscription_service(config, user_count, db_cursor, page_size, server_id)
+            metering_export_to_subscription_service(config, db_cursor, server_id)
         else:
             logger.info("Exporting to file")
             # export to file (for disconnected environments)
-            metering_export_to_file(config, user_count, db_cursor, page_size, server_id)
+            metering_export_to_file(config, db_cursor, server_id)
 
     except Exception as e:
         logger.error(e)
     finally:
-        close_db_connection(db_cursor, db_conn)
+        metering_close_db_cursor(db_cursor)
+        metering_close_db_connection(db_conn)
 
 
 def open_db_connection(config):
@@ -83,18 +76,18 @@ def open_db_connection(config):
             password = db_password
         )
 
-        cur = conn.cursor(cursor_factory = NamedTupleCursor)
-
         logger.debug("Usage metering: connected to database")
 
-        return cur, conn
+        return conn
     except Exception as e:
         logger.error(e)
 
 
-def close_db_connection(cur, conn):
+def metering_close_db_connection(conn):
     try:
-        cur.close()
+        if not conn:
+            return
+
         conn.close()
 
         logger.debug("Usage metering: database is disconnected")
@@ -102,30 +95,19 @@ def close_db_connection(cur, conn):
         logger.error(e)
 
 
-def get_users_count(cur):
-    query = "SELECT count(id) FROM system$user;"
-    
-    logger.debug("Executing query: %s", query)
-
-    cur.execute(query)
-    result = cur.fetchone()[0]
-
-    logger.debug("Users count: %s", result)
-
-    return result
-
-
-def metering_usage_query(config, db_cursor, user_count, page_size=0, offset=0):
-    if page_size < user_count:
-        logger.info(
-            "Processing %d to %d of %d records", 
-            offset + 1, 
-            offset + page_size, 
-            user_count
-        )
-    
+def metering_close_db_cursor(cur):
     try:
-        logger.debug("Begin usage metering query %s", datetime.now())
+        if not cur:
+            return
+
+        cur.close()
+    except Exception as e:
+        logger.error(e)
+
+
+def metering_prepare_db_cursor_for_usage_query(config, db_conn):
+    try:
+        logger.debug("Begin to prepare usage metering query %s", datetime.now())
         
         # the base query
         query = sql.SQL("""
@@ -144,40 +126,31 @@ def metering_usage_query(config, db_cursor, user_count, page_size=0, offset=0):
             {extra_joins}
             WHERE u.name IS NOT NULL 
             ORDER BY u.id
-            {limit}
         """)
 
         # looking for email entities
-        email_table_and_columns = metering_get_email_columns(config, db_cursor)
+        email_table_and_columns = metering_get_email_columns(config, db_conn)
 
         # preparing found email tables and columns to join the query as {email} and {extra_joins}
         email_part, joins_part = metering_convert_found_user_attributes_to_query_additions(email_table_and_columns)
-
-        # preparing LIMIT part of the query
-        if page_size > 0:
-            limit_literal = sql.SQL("LIMIT {page_size} OFFSET {offset}").format(
-                page_size = sql.Literal(page_size),
-                offset = sql.Literal(offset)
-            )
         
         # combining final query
         query = query.format(
             email = email_part,
-            extra_joins = joins_part,
-            limit = limit_literal
+            extra_joins = joins_part
         )
 
-        logger.debug("Constructed query: %s", query.as_string(db_cursor))
+        logger.debug("Constructed query: %s", query.as_string(db_conn))
         
-        # executing query
-        db_cursor.execute(query)
-        result = db_cursor.fetchall()
+        # executing query via separate db cursor since we use batching here
+        batch_cur = metering_get_batch_db_cursor(config, db_conn)
+        batch_cur.execute(query)
 
-        logger.debug("Users found: %s", len(result))
-        logger.debug("End usage metering query %s", datetime.now())
+        logger.debug("Usage metering query is ready %s", datetime.now())
 
-        return result
+        return batch_cur
     except Exception as e:
+        metering_close_db_cursor(batch_cur)
         logger.error(e)
 
 
@@ -196,19 +169,16 @@ def metering_check_subscription_service_availability(config):
     return False
 
 
-def metering_export_to_subscription_service(config, user_count, db_cursor, page_size, server_id):
+def metering_export_to_subscription_service(config, db_cursor, server_id):
+    usage_metrics = []
 
-    for offset in range(0, user_count, page_size):
-        usage_metering_result = metering_usage_query(config, db_cursor, user_count, page_size, offset)
+    # fetching query results in batches (psycopg does all the batching work implicitly)
+    for usage_metric in db_cursor:
+        metric_to_export = metering_convert_data_for_export(usage_metric, server_id)
+        usage_metrics.append(metric_to_export)
 
-        usage_metrics = []
-
-        for usage_metric in usage_metering_result:
-            metric_to_export = metering_convert_data_for_export(usage_metric, server_id)
-            usage_metrics.append(metric_to_export)
-
-        # submitting data to Subscription Service API
-        send_to_subscription_service(config, server_id, usage_metrics)
+    # submitting data to Subscription Service API
+    send_to_subscription_service(config, server_id, usage_metrics)
 
 
 def send_to_subscription_service(config, server_id, usage_metrics):
@@ -271,7 +241,7 @@ def send_to_subscription_service(config, server_id, usage_metrics):
         logger.trace(message)
 
 
-def metering_export_to_file(config, user_count, db_cursor, page_size, server_id):
+def metering_export_to_file(config, db_cursor, server_id):
     try:
         # create export file
         output_file = path.join(
@@ -282,10 +252,18 @@ def metering_export_to_file(config, user_count, db_cursor, page_size, server_id)
         out_file = open(output_file, "w")
 
         # dump usage metering data to file
+        i = 1
         out_file.write("[\n")
-        for offset in range(0, user_count, page_size):
-            usage_metering_result = metering_usage_query(config, db_cursor, user_count, page_size, offset)
-            metering_convert_and_export_to_file(usage_metering_result, server_id, out_file)
+        for usage_metric in db_cursor:
+            export_data = metering_convert_data_for_export(usage_metric, server_id, True)
+            # no comma before the first element in JSON array
+            if i > 1:
+                out_file.write(",\n")
+            i += 1        
+            # using json.dump() instead of json.dumps() and dump each row separately here 
+            # to reduce memory usage since json.dumps() could consume a lot of memory for a 
+            # large number of users (e.g. it takes ~3Gb for 1 million users) 
+            json.dump(export_data, out_file, indent = 4, sort_keys = True)
         out_file.write("\n]")
 
         logger.info("Usage metrics exported %s to %s", datetime.now(), output_file)
@@ -293,21 +271,6 @@ def metering_export_to_file(config, user_count, db_cursor, page_size, server_id)
         logger.error(e)
     finally:
         out_file.close()
-
-
-def metering_convert_and_export_to_file(user_usage_metric_data, server_id, out_file):
-    last_element_index = len(user_usage_metric_data) - 1
-
-    for i, usage_metric in enumerate(user_usage_metric_data):
-        export_data = metering_convert_data_for_export(usage_metric, server_id, True)
-        
-        # using json.dump() instead of json.dumps() and dump each row separately here 
-        # to reduce memory usage since json.dumps() could consume a lot of memory for a 
-        # large number of users (e.g. it takes ~3Gb for 1 million users) 
-        json.dump(export_data, out_file, indent = 4, sort_keys = True)
-
-        if i != last_element_index:
-            out_file.write(",\n")
 
 
 def metering_convert_data_for_export(usage_metric, server_id, to_file = False):
@@ -350,8 +313,11 @@ def metering_convert_datetime_to_epoch(lastlogin):
     return int(epoch)
 
 
-def metering_get_email_columns(config, db_cursor):
+def metering_get_email_columns(config, db_conn):
     try:
+        # simple cursor
+        db_cursor = db_conn.cursor()
+
         email_table_and_columns = dict()
 
         user_specialization_tables = metering_get_user_specialization_tables(db_cursor)
@@ -408,6 +374,8 @@ def metering_get_email_columns(config, db_cursor):
         return email_table_and_columns
     except Exception as e:
         logger.error(e)
+    finally:
+        metering_close_db_cursor(db_cursor)
 
 
 def metering_convert_found_user_attributes_to_query_additions(table_email_columns):
@@ -437,6 +405,26 @@ def metering_convert_found_user_attributes_to_query_additions(table_email_column
     joins_part = sql.SQL(' ').join(joins)
 
     return email_part, joins_part
+
+
+def metering_get_batch_db_cursor(config, conn):
+    # separate db cursor to use batches
+    batch_cur = conn.cursor(
+        # Cursor name should be provided here to use server-side cursor and optimize memory usage: 
+        # Psycopg2 will load all of the query into memory if the name isn’t specified for the cursor 
+        # object even in case of fetchmany() and chunks processing used. If name is specified then 
+        # cursor will be created on the server side that allows to avoid additional memory usage.
+        name = "m2ee_metering_cursor",
+        cursor_factory = NamedTupleCursor
+    )
+
+    # setting batch size if specified, otherwise standard batch=2000 will be used
+    batch_size = config.get_usage_metrics_db_query_batch_size()
+
+    if batch_size:
+        batch_cur.itersize = batch_size
+
+    return batch_cur
 
 
 def metering_get_user_specialization_tables(db_cursor):
