@@ -490,7 +490,7 @@ def metering_get_user_custom_email_columns(config, user_specialization_tables):
         if table in user_specialization_tables:
             columnNames.append(column)
         else:
-            logger.error(
+            logger.warn(
                 "Table '%s' specified in USAGE_METRICS_EMAIL_FIELDS either doesn't " +
                 "exist in the database or is not a 'System.User' specialization",
                 table,
