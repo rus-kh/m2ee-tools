@@ -412,8 +412,9 @@ def metering_get_batch_db_cursor(config, conn):
     batch_cur = conn.cursor(
         # Cursor name should be provided here to use server-side cursor and optimize memory usage: 
         # Psycopg2 will load all of the query into memory if the name isn’t specified for the cursor 
-        # object even in case of fetchmany() and chunks processing used. If name is specified then 
-        # cursor will be created on the server side that allows to avoid additional memory usage.
+        # object even in case of fetchone() or fetchmany() and batch processing used. If name is 
+        # specified then cursor will be created on the server side that allows to avoid additional 
+        # memory usage.
         name = "m2ee_metering_cursor",
         cursor_factory = NamedTupleCursor
     )
