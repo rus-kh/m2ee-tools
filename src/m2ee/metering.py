@@ -259,6 +259,7 @@ def convert_data_for_export(usage_metric, server_id, to_file = False):
     # lastlogin needs to be kept null if null, so possible values here are: <epoch_time>|null
     converted_data["lastlogin"] = convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
     converted_data["name"] = encrypt(usage_metric.name)
+    converted_data["usertype"] = usage_metric.usertype
     converted_data["webserviceuser"] = usage_metric.webserviceuser
 
     if to_file:
