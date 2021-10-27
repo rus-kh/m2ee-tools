@@ -27,37 +27,6 @@ m2ee:
  # about where to find the log which is written by the mendix application
  logfile: /path/to/your/favorite/logfile
 
-metering:
- # usage_metrics_db_query_batch_size specifies how many usage records should be processed
- # in a batch during the export_usage_metrics command. If not set then all query data
- # would be loaded at one take during export_usage_metrics which would increase the memory 
- # consumption. On the other hand, if a very small batch size is set it would increase the 
- # time taken to complete export_usage_metrics
- usage_metrics_db_query_batch_size: 50000
- # usage metrics will be exported to this file appended with the time as milliseconds since epoch
- usage_metrics_output_file_name: "mendix_usage_metrics"
- # [optional] usage metrics file will be created in this path if it's specified or in the
- # m2ee-tools root directory otherwise
- usage_metrics_output_file_path: /path/to/your/output/directory
- # usage metrics will be exported to the Subscription Service via this endpoint (instead of export to 
- # local file) in case of your app is connected to the Internet
- usage_metrics_subscription_service_uri: https://subscription-service-api-endpoint/activate #FIXME: replace with correct url when we have one
- # timeout for Subscription Service in seconds (default is 30 sec)
- usage_metrics_subscription_service_timeout: 30
- # [optional] If your app uses specializations of the 'System.User' entity to store users, use this variable 
- # to point to the them. This enables us to identify internal and external users of your app and 
- # add them to the usage report during the export_usage_metrics command execution. 
- # The value of this variable is in the format 'Module.Entity.Attribute', where 'Module' is the 
- # module of your app which contains the 'Entity' that is a specialization of 'System.User' and 
- # 'Attribute' is the attribute that contains the email address of the user. If you have multiple 
- # specializations of 'System.User', you can specify the values in comma-separated format. 
- # That is 'Module1.Entity1.Attribute1,Module2.Entity2.Attribute2,…,ModuleN.EntityN.AttributeN'. 
- # In the following example there are two specializations identified: 
- # "Administration.Account.Email,MendixSSO.MendixSSOUser.EmailAddress"
- # Define your own specializations of the 'System.User' entity to store users if needed, uncomment 
- # next line and set this variable to specializations that you defined to use this functionality:
- #usage_metrics_email_fields: Module1.Entity1.Attribute1, Module2.Entity2.Attribute2
-
 logging:
  - # example of file logging by the platform itself
    name: FileSubscriber

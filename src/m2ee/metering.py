@@ -31,130 +31,110 @@ except ImportError:
     )
     raise
 
-def metering_export_usage_metrics(m2ee):
+def export_usage_metrics(m2ee):
     try:
         logger.info("Begin exporting usage metrics %s", datetime.now())
 
         # trying to get server_id at the very beginning to 
         # drop futher execution if Mendix app is not running
         # and server_id is unavailable
-        server_id = metering_get_server_id(m2ee.client)
+        server_id = m2ee.client.get_license_information()["license_id"]
 
         config = m2ee.config
 
         db_conn = open_db_connection(config)
-        db_cursor = metering_prepare_db_cursor_for_usage_query(config, db_conn)
 
-        # starting export
-        is_subscription_service_available = metering_check_subscription_service_availability(config)
-        if is_subscription_service_available:
-            # export to Subscription Service directly if it is available (for connected environments)
-            logger.info("Exporting to the Subscription Service")
-            metering_export_to_subscription_service(config, db_cursor, server_id)
-        else:
-            logger.info("Exporting to file")
-            # export to file (for disconnected environments)
-            metering_export_to_file(config, db_cursor, server_id)
-
+        with db_conn:
+            with prepare_db_cursor_for_usage_query(config, db_conn) as db_cursor:
+                # starting export
+                is_subscription_service_available = check_subscription_service_availability(config)
+                if is_subscription_service_available:
+                    # export to Subscription Service directly if it is available (for connected environments)
+                    logger.info("Exporting to the Subscription Service")
+                    export_to_subscription_service(config, db_cursor, server_id)
+                else:
+                    logger.info("Exporting to file")
+                    # export to file (for disconnected environments)
+                    export_to_file(config, db_cursor, server_id)
     except Exception as e:
         logger.error(e)
     finally:
-        metering_close_db_cursor(db_cursor)
-        metering_close_db_connection(db_conn)
+        # context manager doesn't close the connection so we need to do this manually
+        close_db_connection(db_conn)
 
 
 def open_db_connection(config):
-    try:
-        pg_config = config.get_pg_environment() 
-        db_name = pg_config['PGDATABASE']
-        db_username = pg_config['PGUSER']
-        db_password = pg_config['PGPASSWORD']
+    pg_config = config.get_pg_environment() 
+    db_name = pg_config['PGDATABASE']
+    db_username = pg_config['PGUSER']
+    db_password = pg_config['PGPASSWORD']
 
-        conn = psycopg2.connect(
-            database = db_name, 
-            user = db_username, 
-            password = db_password
-        )
+    conn = psycopg2.connect(
+        database = db_name, 
+        user = db_username, 
+        password = db_password
+    )
 
-        logger.debug("Usage metering: connected to database")
+    logger.debug("Usage metering: connected to database")
 
-        return conn
-    except Exception as e:
-        logger.error(e)
+    return conn
 
 
-def metering_close_db_connection(conn):
-    try:
-        if not conn:
-            return
+def close_db_connection(conn):
+    if not conn:
+        return
 
-        conn.close()
+    conn.close()
 
-        logger.debug("Usage metering: database is disconnected")
-    except Exception as e:
-        logger.error(e)
+    logger.debug("Usage metering: database is disconnected")
 
 
-def metering_close_db_cursor(cur):
-    try:
-        if not cur:
-            return
+def prepare_db_cursor_for_usage_query(config, db_conn):
+    logger.debug("Begin to prepare usage metering query %s", datetime.now())
+    
+    # the base query
+    query = sql.SQL("""
+        SELECT 
+            u.name, 
+            u.lastlogin, 
+            u.webserviceuser, 
+            u.blocked, 
+            u.active, 
+            u.isanonymous as is_anonymous,
+            ur.usertype
+            {email} 
+        FROM system$user u 
+        LEFT JOIN system$userreportinfo_user ur_u ON u.id = ur_u.system$userid 
+        LEFT JOIN system$userreportinfo ur ON ur.id = ur_u.system$userreportinfoid
+        {extra_joins}
+        WHERE u.name IS NOT NULL 
+        ORDER BY u.id
+    """)
 
-        cur.close()
-    except Exception as e:
-        logger.error(e)
+    # looking for email entities
+    email_table_and_columns = get_email_columns(config, db_conn)
 
+    # preparing found email tables and columns to join the query as {email} and {extra_joins}
+    email_part, joins_part = convert_found_user_attributes_to_query_additions(email_table_and_columns)
+    
+    # combining final query
+    query = query.format(
+        email = email_part,
+        extra_joins = joins_part
+    )
 
-def metering_prepare_db_cursor_for_usage_query(config, db_conn):
-    try:
-        logger.debug("Begin to prepare usage metering query %s", datetime.now())
-        
-        # the base query
-        query = sql.SQL("""
-            SELECT 
-                u.name, 
-                u.lastlogin, 
-                u.webserviceuser, 
-                u.blocked, 
-                u.active, 
-                u.isanonymous as is_anonymous,
-                ur.usertype
-                {email} 
-            FROM system$user u 
-            LEFT JOIN system$userreportinfo_user ur_u ON u.id = ur_u.system$userid 
-            LEFT JOIN system$userreportinfo ur ON ur.id = ur_u.system$userreportinfoid
-            {extra_joins}
-            WHERE u.name IS NOT NULL 
-            ORDER BY u.id
-        """)
+    logger.trace("Constructed query: %s", query.as_string(db_conn))
+    
+    # executing query via separate db cursor since we use batching here
+    batch_cur = get_batch_db_cursor(config, db_conn)
+    batch_cur.execute(query)
 
-        # looking for email entities
-        email_table_and_columns = metering_get_email_columns(config, db_conn)
+    logger.debug("Usage metering query is ready %s", datetime.now())
 
-        # preparing found email tables and columns to join the query as {email} and {extra_joins}
-        email_part, joins_part = metering_convert_found_user_attributes_to_query_additions(email_table_and_columns)
-        
-        # combining final query
-        query = query.format(
-            email = email_part,
-            extra_joins = joins_part
-        )
-
-        logger.debug("Constructed query: %s", query.as_string(db_conn))
-        
-        # executing query via separate db cursor since we use batching here
-        batch_cur = metering_get_batch_db_cursor(config, db_conn)
-        batch_cur.execute(query)
-
-        logger.debug("Usage metering query is ready %s", datetime.now())
-
-        return batch_cur
-    except Exception as e:
-        metering_close_db_cursor(batch_cur)
-        logger.error(e)
+    return batch_cur
 
 
-def metering_check_subscription_service_availability(config):
+def check_subscription_service_availability(config):
     url = config.get_usage_metrics_subscription_service_uri()
 
     try:
@@ -169,12 +149,12 @@ def metering_check_subscription_service_availability(config):
     return False
 
 
-def metering_export_to_subscription_service(config, db_cursor, server_id):
+def export_to_subscription_service(config, db_cursor, server_id):
     usage_metrics = []
 
     # fetching query results in batches (psycopg does all the batching work implicitly)
     for usage_metric in db_cursor:
-        metric_to_export = metering_convert_data_for_export(usage_metric, server_id)
+        metric_to_export = convert_data_for_export(usage_metric, server_id)
         usage_metrics.append(metric_to_export)
 
     # submitting data to Subscription Service API
@@ -241,21 +221,19 @@ def send_to_subscription_service(config, server_id, usage_metrics):
         logger.trace(message)
 
 
-def metering_export_to_file(config, db_cursor, server_id):
-    try:
-        # create export file
-        output_file = path.join(
-                config.get_usage_metrics_output_file_path(),
-                config.get_usage_metrics_output_file_name() + "_" + str(int(time())) + ".json"
-            )
+def export_to_file(config, db_cursor, server_id):
+    # create export file
+    output_file = path.join(
+            config.get_usage_metrics_output_file_path(),
+            config.get_usage_metrics_output_file_name() + "_" + str(int(time())) + ".json"
+        )
 
-        out_file = open(output_file, "w")
-
+    with open(output_file, "w") as out_file:
         # dump usage metering data to file
         i = 1
         out_file.write("[\n")
         for usage_metric in db_cursor:
-            export_data = metering_convert_data_for_export(usage_metric, server_id, True)
+            export_data = convert_data_for_export(usage_metric, server_id, True)
             # no comma before the first element in JSON array
             if i > 1:
                 out_file.write(",\n")
@@ -267,24 +245,20 @@ def metering_export_to_file(config, db_cursor, server_id):
         out_file.write("\n]")
 
         logger.info("Usage metrics exported %s to %s", datetime.now(), output_file)
-    except Exception as e:
-        logger.error(e)
-    finally:
-        out_file.close()
 
 
-def metering_convert_data_for_export(usage_metric, server_id, to_file = False):
+def convert_data_for_export(usage_metric, server_id, to_file = False):
     converted_data = {}
 
     converted_data["active"] = usage_metric.active
     converted_data["blocked"] = usage_metric.blocked
     # prefer email from the name field over the email field
-    converted_data["emailDomain"] = metering_get_hashed_email_domain(usage_metric.name, usage_metric.email)
+    converted_data["emailDomain"] = get_hashed_email_domain(usage_metric.name, usage_metric.email)
     # isAnonymous needs to be kept null if null, so possible values here are: true|false|null
     converted_data["isAnonymous"] = usage_metric.is_anonymous
     # lastlogin needs to be kept null if null, so possible values here are: <epoch_time>|null
-    converted_data["lastlogin"] = metering_convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
-    converted_data["name"] = metering_encrypt(usage_metric.name)
+    converted_data["lastlogin"] = convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
+    converted_data["name"] = encrypt(usage_metric.name)
     converted_data["webserviceuser"] = usage_metric.webserviceuser
 
     if to_file:
@@ -296,15 +270,15 @@ def metering_convert_data_for_export(usage_metric, server_id, to_file = False):
     return converted_data
 
 
-def metering_get_hashed_email_domain(name, email):
+def get_hashed_email_domain(name, email):
     # prefer email from the name field over the email field
-    hashed_email_domain = metering_extract_and_hash_domain_from_email(name)
+    hashed_email_domain = extract_and_hash_domain_from_email(name)
     if not hashed_email_domain:
-        hashed_email_domain = metering_extract_and_hash_domain_from_email(email)
+        hashed_email_domain = extract_and_hash_domain_from_email(email)
     return hashed_email_domain
 
 
-def metering_convert_datetime_to_epoch(lastlogin):
+def convert_datetime_to_epoch(lastlogin):
     # Convert datetime in epoch format
     lastlogin_string = str(lastlogin)
     parsed_datetime = datetime.strptime(lastlogin_string, "%Y-%m-%d %H:%M:%S.%f")
@@ -313,14 +287,11 @@ def metering_convert_datetime_to_epoch(lastlogin):
     return int(epoch)
 
 
-def metering_get_email_columns(config, db_conn):
-    try:
-        # simple cursor
-        db_cursor = db_conn.cursor()
-
+def get_email_columns(config, db_conn):
+    # simple cursor
+    with db_conn.cursor() as db_cursor: 
         email_table_and_columns = dict()
-
-        user_specialization_tables = metering_get_user_specialization_tables(db_cursor)
+        user_specialization_tables = get_user_specialization_tables(db_cursor)
 
         # exit if no entities found
         if len(user_specialization_tables) == 0:
@@ -336,7 +307,7 @@ def metering_get_email_columns(config, db_conn):
         columns_clause = sql.SQL("AND column_name LIKE '%%mail%%'")
 
         # getting user defined email columns if they are provided
-        user_custom_email_columns = metering_get_user_custom_email_columns(config, user_specialization_tables)
+        user_custom_email_columns = get_user_custom_email_columns(config, user_specialization_tables)
 
         #  changing query if user defined email columns provided and valid
         if user_custom_email_columns:
@@ -368,17 +339,13 @@ def metering_get_email_columns(config, db_conn):
             column = row[1].strip().lower()
             if table and column:
                 email_table_and_columns[table] = column
-        
-        logger.debug("Probable tables and columns that may have an email address are: %s", email_table_and_columns)
+    
+    logger.debug("Probable tables and columns that may have an email address are: %s", email_table_and_columns)
 
-        return email_table_and_columns
-    except Exception as e:
-        logger.error(e)
-    finally:
-        metering_close_db_cursor(db_cursor)
+    return email_table_and_columns
 
 
-def metering_convert_found_user_attributes_to_query_additions(table_email_columns):
+def convert_found_user_attributes_to_query_additions(table_email_columns):
     # exit if there are no user email tables found
     if not table_email_columns:
         return sql.SQL(''), sql.SQL('')
@@ -407,7 +374,7 @@ def metering_convert_found_user_attributes_to_query_additions(table_email_column
     return email_part, joins_part
 
 
-def metering_get_batch_db_cursor(config, conn):
+def get_batch_db_cursor(config, conn):
     # separate db cursor to use batches
     batch_cur = conn.cursor(
         # Cursor name should be provided here to use server-side cursor and optimize memory usage: 
@@ -419,7 +386,7 @@ def metering_get_batch_db_cursor(config, conn):
         cursor_factory = NamedTupleCursor
     )
 
-    # setting batch size if specified, otherwise standard batch=2000 will be used
+    # setting batch size if specified, otherwise default batch=2000 will be used
     batch_size = config.get_usage_metrics_db_query_batch_size()
 
     if batch_size:
@@ -428,41 +395,38 @@ def metering_get_batch_db_cursor(config, conn):
     return batch_cur
 
 
-def metering_get_user_specialization_tables(db_cursor):
-    try:
-        query = "SELECT DISTINCT submetaobjectname FROM system$user;"
+def get_user_specialization_tables(db_cursor):
+    query = "SELECT DISTINCT submetaobjectname FROM system$user;"
 
-        logger.debug("Executing query: %s", query)
+    logger.debug("Executing query: %s", query)
 
-        db_cursor.execute(query)
-        result = [r[0] for r in db_cursor.fetchall()]
+    db_cursor.execute(query)
+    result = [r[0] for r in db_cursor.fetchall()]
 
-        logger.debug("User specialization tables are: <%s>", result)
+    logger.debug("User specialization tables are: <%s>", result)
 
-        user_specialization_tables = []
-        for submetaobject in result:
-            # ignore the None values and System.User table
-            if submetaobject is not None and submetaobject != "System.User":
-                # cast user attribute names to Postgres syntax
-                submetaobject = submetaobject.strip().lower().replace('.', '$')
-                # ignore empty rows
-                if submetaobject:
-                    # checking if user provided attribute is valid SQL literal and adding it to the result array
-                    user_specialization_tables.append(submetaobject)
+    user_specialization_tables = []
+    for submetaobject in result:
+        # ignore the None values and System.User table
+        if submetaobject is not None and submetaobject != "System.User":
+            # cast user attribute names to Postgres syntax
+            submetaobject = submetaobject.strip().lower().replace('.', '$')
+            # ignore empty rows
+            if submetaobject:
+                # checking if user provided attribute is valid SQL literal and adding it to the result array
+                user_specialization_tables.append(submetaobject)
 
-        return user_specialization_tables
-    except Exception as e:
-        logger.error(e)
+    return user_specialization_tables
         
 
-def metering_get_user_custom_email_columns(config, user_specialization_tables):
+def get_user_custom_email_columns(config, user_specialization_tables):
     usage_metrics_email_fields = config.get_usage_metrics_email_fields()
     
     # exit if custom email fields are not provided
     if not usage_metrics_email_fields:
         return ""
 
-    valid_attributes = metering_preprocess_and_validate_attributes(usage_metrics_email_fields)
+    valid_attributes = preprocess_and_validate_attributes(usage_metrics_email_fields)
     
     if not valid_attributes:
         return ""
@@ -492,7 +456,7 @@ def metering_get_user_custom_email_columns(config, user_specialization_tables):
     return columnNames
 
 
-def metering_preprocess_and_validate_attributes(usage_metrics_email_fields):
+def preprocess_and_validate_attributes(usage_metrics_email_fields):
     # cleaning value from spaces
     # using for loop to keep it works with python 2 and 3 versions
     usage_metrics_email_fields = "".join(c for c in usage_metrics_email_fields if c not in string.whitespace)
@@ -515,7 +479,7 @@ def metering_preprocess_and_validate_attributes(usage_metrics_email_fields):
     return usage_metrics_email_fields
     
 
-def metering_extract_and_hash_domain_from_email(email):
+def extract_and_hash_domain_from_email(email):
     if not isinstance(email, str):
         return ""
 
@@ -527,12 +491,12 @@ def metering_extract_and_hash_domain_from_email(email):
         domain = str(email).split("@")[1]
 
     if len(domain) >= 2:
-        return metering_encrypt(domain)
+        return encrypt(domain)
     else:
         return ""
 
 
-def metering_encrypt(name):
+def encrypt(name):
     salt = [53, 14, 215, 17, 147, 90, 22, 81, 48, 249, 140, 146, 201, 247, 182, 18, 218, 242, 114, 5, 255, 202, 227,
             242, 126, 235, 162, 38, 52, 150, 95, 193]
     salt_byte_array = bytes(salt)
@@ -546,9 +510,3 @@ def metering_encrypt(name):
     
     return h.hexdigest()
 
-
-def metering_get_server_id(client):
-    try:
-        return client.get_license_information()["license_id"]
-    except M2EEAdminNotAvailable as e:
-        raise Exception("The application process is not running.")

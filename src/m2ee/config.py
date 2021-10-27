@@ -647,7 +647,7 @@ class M2EEConfig:
         return self._conf['metering'].get('usage_metrics_email_fields', '')
 
     def get_usage_metrics_subscription_service_uri(self):
-        return self._conf['metering'].get('usage_metrics_subscription_service_uri', '')
+        return self._conf['metering'].get('usage_metrics_subscription_service_uri', '') #FIXME: replace default correct url when we have one
 
     def get_usage_metrics_subscription_service_timeout(self):
         return self._conf['metering'].get('usage_metrics_subscription_service_timeout', 30)
