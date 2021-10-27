@@ -903,7 +903,8 @@ Available commands:
  about - show Mendix Runtime version information
  check_constants - check for missing or unneeded constant definitions
  enable_debugger - enable remote debugger API
- export_usage_metrics - export usage metrics
+ export_usage_metrics - export app's usage metrics to the Subscription Service or 
+    into a file (in case of app is not connected to the Internet)
  disable_debugger - disable remote debugger API
  show_debugger_status - show whether debugger is enabled or not
  show_current_runtime_requests - show action stack of current running requests

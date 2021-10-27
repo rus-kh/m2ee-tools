@@ -708,6 +708,9 @@ mxruntime:
  # default: True  # Mendix 7
  PersistentSessions: True
 
+ # These parameters are used for app's usage metrics export.
+ # If app has connection to the Internet then usage metrics will be exported to the
+ # Subscription Service, otherwise usage metrics will be exported to the local file 
 metering:
  # usage_metrics_db_query_batch_size specifies how many usage records should be processed
  # in a batch during the export_usage_metrics command. If not set then all query data
