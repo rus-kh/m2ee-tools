@@ -874,9 +874,10 @@ class CLI(cmd.Cmd, object):
         return suggestions
 
     def do_export_usage_metrics(self, args):
+        mendix_version = self.m2ee.config.get_runtime_version()
         # available only till Mendix v9.6, from v9.6 replaced by runtime micrometer:
         # https://docs.mendix.com/releasenotes/studio-pro/9.6#custom-metrics
-        if self.m2ee.config.get_runtime_version() < 9.6:
+        if mendix_version >= 7.5 and mendix_version < 9.6:
             metering.export_usage_metrics(self.m2ee)
         else:
             print("""
