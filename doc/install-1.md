@@ -2,12 +2,23 @@
 
 # Installing the Mendix software
 
-To be able to run Mendix applications, the following pieces of software need to be installed:
+To be able to run Mendix applications, the following pieces of software need to
+be installed:
 
- * Mendix Deployment tools (m2ee-tools), a helper script to manage deployments and application processes.
- * The Java Runtime Environment.
+ * Mendix Deployment tools (m2ee-tools), to manage deployments and application
+   processes. Also, a few Python library dependencies.
+ * curl, to be able to conveniently download the Mendix Runtime server
+   distribution files.
+ * A suitable Java Runtime Environment.
 
-This page describes installation instructions for Debian in case a system wide installation is done using provided software packages. If you want to do a custom installation on another operating system or an installation without the need to use the administrator (root) account, additionally have a look at the documentation to do a [local m2ee-tools and mendix runtime installation](non-root-install.md).
+The current Python library dependencies are:
+ * PyYAML
+ * httplib2
+
+This page first of all describes installation instructions for Debian GNU/Linux
+in case a system wide installation is done using provided software packages.
+The section after that provides hints about setting all of this up on a
+different GNU/Linux distribution or even possibly other unix-like systems.
 
 ## Deployment Tools for Debian
 
@@ -62,7 +73,15 @@ Now you can install m2ee-tools:
     Do you want to continue? [Y/n]
     [...]
 
-## Oracle Java JRE or OpenJDK JRE on Debian
+## Doing a manual m2ee-tools install
+
+It's also perfectly fine to run the m2ee-tools from a git clone, or from a
+download of one of the tagged releases on github. In this case you have to make
+sure the Python library dependencies are also installed. How to do this, using
+either provided packages available from the currently used operating system,
+or, using pip, is left as choice to the experienced system administrator.
+
+## Oracle Java JRE or OpenJDK JRE
 
 In order to run the Mendix server, you also need an OpenJDK or Oracle Java JRE runtime environment. Which Java JRE to use depends on the version of the Mendix Business Modeler you're using to create the application that needs to run on your new server.
 
