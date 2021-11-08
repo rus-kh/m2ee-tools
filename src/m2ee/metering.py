@@ -22,14 +22,6 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 usage_metrics_schema_version = "1.2"
 
-try:
-    import httplib2
-except ImportError:
-    logger.critical(
-        "Failed to import httplib2. This module is needed by "
-        "m2ee. Please povide it on the python library path"
-    )
-    raise
 
 def export_usage_metrics(m2ee):
     try:
