@@ -9,10 +9,10 @@ import logging
 import re
 
 import psycopg2
+import requests
 import socket
 
 from os import path
-from m2ee.client import M2EEAdminNotAvailable
 from psycopg2 import sql
 from psycopg2.extras import NamedTupleCursor
 from time import mktime
@@ -100,7 +100,7 @@ def prepare_db_cursor_for_usage_query(config, db_conn):
             u.webserviceuser, 
             u.blocked, 
             u.active, 
-            u.isanonymous as is_anonymous,
+            u.isanonymous,
             ur.usertype
             {email} 
         FROM system$user u 
@@ -138,10 +138,9 @@ def check_subscription_service_availability(config):
     url = config.get_usage_metrics_subscription_service_uri()
 
     try:
-        http = httplib2.Http()
-        response = http.request(url, 'POST')
+        response = requests.post(url)
 
-        if int(response[0]['status']) == 200:
+        if response.status_code == requests.codes.ok:
             return True
     except:
         pass
@@ -177,41 +176,36 @@ def send_to_subscription_service(config, server_id, usage_metrics):
     url = config.get_usage_metrics_subscription_service_uri()
     subscription_service_timeout = config.get_usage_metrics_subscription_service_timeout()
 
+    logger.trace("Metering request headers: %s" % headers)
+    logger.trace("Metering request body: %s" % body)
+
     try:
-        h = httplib2.Http(
-            timeout = subscription_service_timeout, 
-            proxy_info = None   # httplib does not like os.fork
+        response = requests.post(
+            url=url, 
+            data=body, 
+            headers=headers, 
+            timeout=subscription_service_timeout
         )
-
-        logger.trace("Metering request headers: %s" % headers)
-        logger.trace("Metering request body: %s" % body)
-
-        response_headers, response_bytes = h.request(url, "POST", body, headers)
-        response_body = response_bytes.decode('utf-8')
+        response_body = response.content.decode('utf-8')
 
         logger.trace("Subscription Service response: %s" % response_body)
-        
-        if (response_headers['status'] != "200"):
+
+        if response.status_code != requests.codes.ok:
             logger.error(
                 "Non OK http status code: %s %s" %
-                (response_headers, response_body)
+                (response.headers, response_body)
             )
             return
         
         response = json.loads(response_body)
         result = response['licensekey'] 
         
-        if not result:
+        if result:
+            logger.info("Usage metrics exported %s to Subscription Service", datetime.now())    
+        else:
             error_msg = response['logmessages'] if response['logmessages'] else ""
             logger.error("Subscription Service error %s" % error_msg)
         
-        logger.info("Usage metrics exported %s to Subscription Service", datetime.now())
-        
-    except AttributeError as e:
-        # httplib 0.6 throws this in case of a connection refused :-|
-        if str(e) == "'NoneType' object has no attribute 'makefile'":
-            message = "Subscription Service API not available for requests."
-            logger.trace("%s (%s: %s)" % (message, type(e), e))
     except socket.timeout as e:
         message = "Subscription Service API does not respond. "
         "Timeout reached after %s seconds." % subscription_service_timeout
@@ -255,7 +249,7 @@ def convert_data_for_export(usage_metric, server_id, to_file = False):
     # prefer email from the name field over the email field
     converted_data["emailDomain"] = get_hashed_email_domain(usage_metric.name, usage_metric.email)
     # isAnonymous needs to be kept null if null, so possible values here are: true|false|null
-    converted_data["isAnonymous"] = usage_metric.is_anonymous
+    converted_data["isAnonymous"] = usage_metric.isanonymous
     # lastlogin needs to be kept null if null, so possible values here are: <epoch_time>|null
     converted_data["lastlogin"] = convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
     converted_data["name"] = encrypt(usage_metric.name)

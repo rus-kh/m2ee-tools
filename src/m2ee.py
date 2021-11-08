@@ -877,14 +877,25 @@ class CLI(cmd.Cmd, object):
         mendix_version = self.m2ee.config.get_runtime_version()
         # available only for Mendix versions from v7.5.0 to v9.6, from v9.6 it has been replaced 
         # by runtime micrometer: https://docs.mendix.com/releasenotes/studio-pro/9.6#custom-metrics
-        if mendix_version >= 7.5 and mendix_version < 9.6:
-            metering.export_usage_metrics(self.m2ee)
-        else:
+        if mendix_version < 7.5 and mendix_version >= 9.6:
             print("""
                 export_usage_metrics supported only for the Mendix versions from 7.5.0 to 9.6.
                 From version 9.6 and above use Micrometer instead:
                 https://docs.mendix.com/releasenotes/studio-pro/9.6#custom-metrics
             """)
+            return
+
+        if not self.m2ee.has_license:
+            print("""
+                Your application has no active license. 
+                You can activate your license with `activate_license` m2ee command if you 
+                already have a license key. Otherwise, please contact your Mendix account 
+                manager or Mendix Support for further instructions about on premise licensing.
+                See https://docs.mendix.com/developerportal/deploy/unix-like
+            """)
+            return
+            
+        metering.export_usage_metrics(self.m2ee)
 
     def do_help(self, args):
         print("""Welcome to m2ee, the Mendix Runtime helper tools.
