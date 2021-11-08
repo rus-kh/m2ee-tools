@@ -178,26 +178,6 @@ def send_to_subscription_service(config, server_id, usage_metrics):
             headers=headers, 
             timeout=subscription_service_timeout
         )
-        response_body = response.content.decode('utf-8')
-
-        logger.trace("Subscription Service response: %s" % response_body)
-
-        if response.status_code != requests.codes.ok:
-            logger.error(
-                "Non OK http status code: %s %s" %
-                (response.headers, response_body)
-            )
-            return
-        
-        response = json.loads(response_body)
-        result = response['licensekey'] 
-        
-        if result:
-            logger.info("Usage metrics exported %s to Subscription Service", datetime.now())    
-        else:
-            error_msg = response['logmessages'] if response['logmessages'] else ""
-            logger.error("Subscription Service error %s" % error_msg)
-        
     except socket.timeout as e:
         message = "Subscription Service API does not respond. "
         "Timeout reached after %s seconds." % subscription_service_timeout
@@ -206,6 +186,25 @@ def send_to_subscription_service(config, server_id, usage_metrics):
         message = "Subscription Service API not available for requests: (%s: %s)" % (type(e), e)
         logger.trace(message)
 
+    response_body = response.content.decode('utf-8')
+
+    logger.trace("Subscription Service response: %s" % response_body)
+
+    if response.status_code != requests.codes.ok:
+        logger.error(
+            "Non OK http status code: %s %s" %
+            (response.headers, response_body)
+        )
+        return
+    
+    response = json.loads(response_body)
+    result = response['licensekey'] 
+    
+    if result:
+        logger.info("Usage metrics exported %s to Subscription Service", datetime.now())    
+    else:
+        error_msg = response['logmessages'] if response['logmessages'] else ""
+        logger.error("Subscription Service error %s" % error_msg)
 
 def export_to_file(config, db_cursor, server_id):
     # create export file
