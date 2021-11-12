@@ -4,6 +4,7 @@
 import string
 import datetime
 import hashlib
+import shutil
 import json
 import logging
 import re
@@ -13,11 +14,13 @@ import requests
 import socket
 
 from os import path
+from os import makedirs
 from psycopg2 import sql
 from psycopg2.extras import NamedTupleCursor
 from time import mktime
 from time import time
 from datetime import datetime
+
 
 logger = logging.getLogger(__name__)
 usage_metrics_schema_version = "1.2"
@@ -73,11 +76,7 @@ def open_db_connection(config):
 
 
 def close_db_connection(conn):
-    if not conn:
-        return
-
     conn.close()
-
     logger.debug("Usage metering: database is disconnected")
 
 
@@ -108,7 +107,7 @@ def prepare_db_cursor_for_usage_query(config, db_conn):
 
     # preparing found email tables and columns to join the query as {email} and {extra_joins}
     email_part, joins_part = convert_found_user_attributes_to_query_additions(email_table_and_columns)
-    
+
     # combining final query
     query = query.format(
         email = email_part,
@@ -145,7 +144,7 @@ def export_to_subscription_service(config, db_cursor, server_id):
 
     # fetching query results in batches (psycopg does all the batching work implicitly)
     for usage_metric in db_cursor:
-        metric_to_export = convert_data_for_export(usage_metric, server_id)
+        metric_to_export = convert_data_for_export(usage_metric, server_id, db_cursor)
         usage_metrics.append(metric_to_export)
 
     # submitting data to Subscription Service API
@@ -207,10 +206,12 @@ def send_to_subscription_service(config, server_id, usage_metrics):
         logger.error("Subscription Service error %s" % error_msg)
 
 def export_to_file(config, db_cursor, server_id):
-    # create export file
+    # create file
+    file_suffix = str(int(time()))
+    output_dir = create_output_dir(config, file_suffix)
     output_file = path.join(
-            config.get_usage_metrics_output_file_path(),
-            config.get_usage_metrics_output_file_name() + "_" + str(int(time())) + ".json"
+            output_dir,
+            config.get_usage_metrics_output_file_name() + "_" + file_suffix + ".json"
         )
 
     with open(output_file, "w") as out_file:
@@ -218,7 +219,7 @@ def export_to_file(config, db_cursor, server_id):
         i = 1
         out_file.write("[\n")
         for usage_metric in db_cursor:
-            export_data = convert_data_for_export(usage_metric, server_id, True)
+            export_data = convert_data_for_export(usage_metric, server_id, db_cursor, True)
             # no comma before the first element in JSON array
             if i > 1:
                 out_file.write(",\n")
@@ -231,19 +232,26 @@ def export_to_file(config, db_cursor, server_id):
 
         logger.info("Usage metrics exported %s to %s", datetime.now(), output_file)
 
+    generate_md5(output_file)
+    zip_files(output_dir, file_suffix)
 
-def convert_data_for_export(usage_metric, server_id, to_file = False):
+
+def convert_data_for_export(usage_metric, server_id, db_cursor, to_file = False):
     converted_data = {}
+
+    column_names = column_names = [desc[0] for desc in db_cursor.description]
 
     converted_data["active"] = usage_metric.active
     converted_data["blocked"] = usage_metric.blocked
     # prefer email from the name field over the email field
-    converted_data["emailDomain"] = get_hashed_email_domain(usage_metric.name, usage_metric.email)
+    # since email is mandatory field for the Subscription Service, 
+    # setting email value as empty if there is no email user columns
+    converted_data["emailDomain"] = get_hashed_email_domain(usage_metric.name, usage_metric.email) if 'email' in column_names else ""
     # isAnonymous needs to be kept null if null, so possible values here are: true|false|null
     converted_data["isAnonymous"] = usage_metric.isanonymous
     # lastlogin needs to be kept null if null, so possible values here are: <epoch_time>|null
     converted_data["lastlogin"] = convert_datetime_to_epoch(usage_metric.lastlogin) if usage_metric.lastlogin else None
-    converted_data["name"] = encrypt(usage_metric.name)
+    converted_data["name"] = hash_data(usage_metric.name)
     converted_data["usertype"] = usage_metric.usertype
     converted_data["webserviceuser"] = usage_metric.webserviceuser
 
@@ -477,12 +485,12 @@ def extract_and_hash_domain_from_email(email):
         domain = str(email).split("@")[1]
 
     if len(domain) >= 2:
-        return encrypt(domain)
+        return hash_data(domain)
     else:
         return ""
 
 
-def encrypt(name):
+def hash_data(name):
     salt = [53, 14, 215, 17, 147, 90, 22, 81, 48, 249, 140, 146, 201, 247, 182, 18, 218, 242, 114, 5, 255, 202, 227,
             242, 126, 235, 162, 38, 52, 150, 95, 193]
     salt_byte_array = bytes(salt)
@@ -495,4 +503,21 @@ def encrypt(name):
     h.update(byte_array)
     
     return h.hexdigest()
+
+
+def create_output_dir(config, file_suffix):
+    output_path = config.get_usage_metrics_output_file_path() + "/usage_metrics_output_" + file_suffix
+    # if not path.exists(output_path):
+    makedirs(output_path)
+    return output_path
+
+
+def generate_md5(file):
+    generated_md5 = hashlib.md5(open(file, "rb").read()).hexdigest()
+    with open(file + '.md5', 'w') as md5_file:
+        md5_file.write(generated_md5)
+
+
+def zip_files(directory, file_suffix):
+    shutil.make_archive('mendix_usage_metrics_' + file_suffix, 'zip', directory)
 
