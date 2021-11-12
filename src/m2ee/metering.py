@@ -339,7 +339,7 @@ def convert_found_user_attributes_to_query_additions(table_email_columns):
     # exit if there are no user email tables found
     if not table_email_columns:
         # since email is mandatory field for the Subscription Service, 
-        # setting email value as empty if there is no email columns at all
+        # setting email value to empty if there is no email columns at all
         return sql.SQL(", '' as email "), sql.SQL('')
 
     # making 'email attribute' and 'joins' part of the query
