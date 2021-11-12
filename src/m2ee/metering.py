@@ -144,7 +144,7 @@ def export_to_subscription_service(config, db_cursor, server_id):
 
     # fetching query results in batches (psycopg does all the batching work implicitly)
     for usage_metric in db_cursor:
-        metric_to_export = convert_data_for_export(usage_metric, server_id, db_cursor)
+        metric_to_export = convert_data_for_export(usage_metric, server_id)
         usage_metrics.append(metric_to_export)
 
     # submitting data to Subscription Service API
@@ -219,7 +219,7 @@ def export_to_file(config, db_cursor, server_id):
         i = 1
         out_file.write("[\n")
         for usage_metric in db_cursor:
-            export_data = convert_data_for_export(usage_metric, server_id, db_cursor, True)
+            export_data = convert_data_for_export(usage_metric, server_id, True)
             # no comma before the first element in JSON array
             if i > 1:
                 out_file.write(",\n")
@@ -236,17 +236,13 @@ def export_to_file(config, db_cursor, server_id):
     zip_files(output_dir, file_suffix)
 
 
-def convert_data_for_export(usage_metric, server_id, db_cursor, to_file = False):
+def convert_data_for_export(usage_metric, server_id, to_file = False):
     converted_data = {}
-
-    column_names = column_names = [desc[0] for desc in db_cursor.description]
 
     converted_data["active"] = usage_metric.active
     converted_data["blocked"] = usage_metric.blocked
     # prefer email from the name field over the email field
-    # since email is mandatory field for the Subscription Service, 
-    # setting email value as empty if there is no email user columns
-    converted_data["emailDomain"] = get_hashed_email_domain(usage_metric.name, usage_metric.email) if 'email' in column_names else ""
+    converted_data["emailDomain"] = get_hashed_email_domain(usage_metric.name, usage_metric.email)
     # isAnonymous needs to be kept null if null, so possible values here are: true|false|null
     converted_data["isAnonymous"] = usage_metric.isanonymous
     # lastlogin needs to be kept null if null, so possible values here are: <epoch_time>|null
@@ -342,7 +338,9 @@ def get_email_columns(config, db_conn):
 def convert_found_user_attributes_to_query_additions(table_email_columns):
     # exit if there are no user email tables found
     if not table_email_columns:
-        return sql.SQL(''), sql.SQL('')
+        # since email is mandatory field for the Subscription Service, 
+        # setting email value as empty if there is no email columns at all
+        return sql.SQL(", '' as email "), sql.SQL('')
 
     # making 'email attribute' and 'joins' part of the query
     projection = list()
