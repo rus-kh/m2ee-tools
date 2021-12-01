@@ -140,15 +140,23 @@ def check_subscription_service_availability(config):
 
 
 def export_to_subscription_service(config, db_cursor, server_id):
-    usage_metrics = []
+    # setting batch size if specified, otherwise default batch size will be used
+    batch_size = config.get_subscription_service_api_batch_size()
 
     # fetching query results in batches (psycopg does all the batching work implicitly)
+    usage_metrics = []
+    rows_processed = 0
     for usage_metric in db_cursor:
         metric_to_export = convert_data_for_export(usage_metric, server_id)
         usage_metrics.append(metric_to_export)
-
-    # submitting data to Subscription Service API
-    send_to_subscription_service(config, server_id, usage_metrics)
+        if rows_processed % batch_size == 0:
+            # submitting next batch data to the Subscription Service API
+            send_to_subscription_service(config, server_id, usage_metrics)
+            usage_metrics = []
+        rows_processed += 1
+    # submitting remaining data (in case of last batch is less then batch_size)
+    if usage_metrics:
+        send_to_subscription_service(config, server_id, usage_metrics)
 
 
 def send_to_subscription_service(config, server_id, usage_metrics):
@@ -166,9 +174,6 @@ def send_to_subscription_service(config, server_id, usage_metrics):
 
     url = config.get_usage_metrics_subscription_service_uri()
     subscription_service_timeout = config.get_usage_metrics_subscription_service_timeout()
-
-    logger.trace("Metering request headers: %s" % headers)
-    logger.trace("Metering request body: %s" % body)
 
     try:
         response = requests.post(

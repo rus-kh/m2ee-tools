@@ -718,6 +718,11 @@ metering:
  # consumption. On the other hand, if a very small batch size is set it would increase the 
  # time taken to complete export_usage_metrics
  usage_metrics_db_query_batch_size: 50000
+ # subscription_service_api_batch_size specifies how many usage records should be processed
+ # in one request during the submitting it to the Subscription Service API. If not set then default
+ # 50000 would be sent at one take which could increase the memory consumption. On the other hand, 
+ # if a very small batch size is set it would increase the time taken to complete the export
+ subscription_service_api_batch_size: 50000
  # usage metrics will be exported to this file appended with the time as milliseconds since epoch
  usage_metrics_output_file_name: "mendix_usage_metrics"
  # [optional] usage metrics file will be created in this path if it's specified or in the

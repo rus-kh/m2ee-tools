@@ -637,6 +637,9 @@ class M2EEConfig:
     def get_usage_metrics_db_query_batch_size(self):
             return self._conf['metering'].get('usage_metrics_db_query_batch_size', 0)
 
+    def get_subscription_service_api_batch_size(self):
+            return self._conf['metering'].get('subscription_service_api_batch_size', 50000)
+
     def get_usage_metrics_output_file_name(self):
         return self._conf['metering'].get('usage_metrics_output_file_name', 'mendix_usage_metrics')
 
