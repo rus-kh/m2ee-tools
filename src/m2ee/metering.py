@@ -145,7 +145,7 @@ def export_to_subscription_service(config, db_cursor, server_id):
 
     # fetching query results in batches (psycopg does all the batching work implicitly)
     usage_metrics = []
-    rows_processed = 0
+    rows_processed = 1
     for usage_metric in db_cursor:
         metric_to_export = convert_data_for_export(usage_metric, server_id)
         usage_metrics.append(metric_to_export)
@@ -209,6 +209,7 @@ def send_to_subscription_service(config, server_id, usage_metrics):
     else:
         error_msg = response['logmessages'] if response['logmessages'] else ""
         logger.error("Subscription Service error %s" % error_msg)
+
 
 def export_to_file(config, db_cursor, server_id):
     # create file
