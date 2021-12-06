@@ -20,6 +20,8 @@ from psycopg2.extras import NamedTupleCursor
 from time import mktime
 from time import time
 from datetime import datetime
+from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED
 
 
 logger = logging.getLogger(__name__)
@@ -214,11 +216,7 @@ def send_to_subscription_service(config, server_id, usage_metrics):
 def export_to_file(config, db_cursor, server_id):
     # create file
     file_suffix = str(int(time()))
-    output_dir = create_output_dir(config, file_suffix)
-    output_file = path.join(
-            output_dir,
-            config.get_usage_metrics_output_file_name() + "_" + file_suffix + ".json"
-        )
+    output_file = path.join(config.get_usage_metrics_output_file_name() + "_" + file_suffix + ".json")
 
     with open(output_file, "w") as out_file:
         # dump usage metering data to file
@@ -238,8 +236,7 @@ def export_to_file(config, db_cursor, server_id):
 
         logger.info("Usage metrics exported %s to %s", datetime.now(), output_file)
 
-    generate_md5(output_file)
-    zip_files(output_dir, file_suffix)
+    zip_file(output_file, file_suffix)
 
 
 def convert_data_for_export(usage_metric, server_id, to_file = False):
@@ -509,19 +506,7 @@ def hash_data(name):
     return h.hexdigest()
 
 
-def create_output_dir(config, file_suffix):
-    output_path = config.get_usage_metrics_output_file_path() + "/usage_metrics_output_" + file_suffix
-    # if not path.exists(output_path):
-    makedirs(output_path)
-    return output_path
-
-
-def generate_md5(file):
-    generated_md5 = hashlib.md5(open(file, "rb").read()).hexdigest()
-    with open(file + '.md5', 'w') as md5_file:
-        md5_file.write(generated_md5)
-
-
-def zip_files(directory, file_suffix):
-    shutil.make_archive('mendix_usage_metrics_' + file_suffix, 'zip', directory)
+def zip_file(file_path, file_suffix):
+    with ZipFile('mendix_usage_metrics_' + file_suffix + '.zip', 'w', ZIP_DEFLATED) as zip_archive:
+        zip_archive.write(file_path)
 
