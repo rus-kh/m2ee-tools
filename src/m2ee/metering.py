@@ -242,6 +242,8 @@ def export_to_file(config, db_cursor, server_id):
 def convert_data_for_export(usage_metric, server_id, to_file = False):
     converted_data = {}
 
+    # for incremental upload and to prevent the same usage metrics submitted twice
+    converted_data["timestamp"] = str(datetime.now())
     converted_data["active"] = usage_metric.active
     converted_data["blocked"] = usage_metric.blocked
     # prefer email from the name field over the email field
