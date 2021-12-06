@@ -507,6 +507,8 @@ def hash_data(name):
 
 
 def zip_file(file_path, file_suffix):
-    with ZipFile('mendix_usage_metrics_' + file_suffix + '.zip', 'w', ZIP_DEFLATED) as zip_archive:
+    archive_name = 'mendix_usage_metrics_' + file_suffix + '.zip'
+    with ZipFile(archive_name, 'w', ZIP_DEFLATED) as zip_archive:
         zip_archive.write(file_path)
+
 
