@@ -223,7 +223,13 @@ def export_to_file(config, db_cursor, server_id):
     with open(output_file, "w") as out_file:
         # dump usage metering data to file
         i = 1
-        out_file.write("[\n")
+        out_file.write("{\n")
+        out_file.write('"subscriptionSecret": "{}",\n'.format(server_id))
+        out_file.write('"environmentName": "",\n')
+        out_file.write('"projectID": "{}",\n'.format(config.get_project_id()))
+        # for incremental uploads and to prevent the same usage metrics processed more than once
+        out_file.write('"timestamp": "{}",\n'.format(str(datetime.now())))
+        out_file.write('"users": [\n')
         for usage_metric in db_cursor:
             export_data = convert_data_for_export(usage_metric, server_id, True)
             # no comma before the first element in JSON array
@@ -235,6 +241,7 @@ def export_to_file(config, db_cursor, server_id):
             # large number of users (e.g. it takes ~3Gb for 1 million users) 
             json.dump(export_data, out_file, indent = 4, sort_keys = True)
         out_file.write("\n]")
+        out_file.write("\n}")
 
         logger.info("Usage metrics exported %s to %s", datetime.now(), output_file)
 
